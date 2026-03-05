@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather App</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+margin:0;
+font-family:system-ui, -apple-system, Segoe UI, Roboto;
+background:#0f172a;
+color:white;
+}
+
+header{
+padding:15px;
+font-size:22px;
+font-weight:600;
+text-align:center;
+background:#1e293b;
+}
+
+.container{
+padding:10px;
+max-width:1200px;
+margin:auto;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+gap:15px;
+}
+
+.card{
+background:#1e293b;
+border-radius:14px;
+padding:15px;
+box-shadow:0 6px 20px rgba(0,0,0,.4);
+}
+
+#radar{
+height:400px;
+border-radius:10px;
+}
+
+.forecast-row{
+display:flex;
+overflow-x:auto;
+gap:10px;
+}
+
+.day{
+background:#334155;
+padding:10px;
+border-radius:10px;
+min-width:110px;
+text-align:center;
+}
+
+.hour-table{
+max-height:300px;
+overflow-y:auto;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+td{
+padding:6px;
+border-bottom:1px solid #334155;
+font-size:14px;
+}
+
+canvas{
+background:#0f172a;
+border-radius:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+Weather Dashboard
+</header>
+
+<div class="container">
+
+<div class="grid">
+
+<div class="card">
+<h3>Current Conditions</h3>
+<div id="current">Loading...</div>
+</div>
+
+<div class="card">
+<h3>Weather Radar</h3>
+<div id="radar"></div>
+</div>
+
+</div>
+
+<div class="card">
+<h3>7 Day Forecast</h3>
+<div class="forecast-row" id="forecast"></div>
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h3>Hourly Forecast</h3>
+<div class="hour-table">
+<table id="hourly"></table>
+</div>
+</div>
+
+<div class="card">
+<h3>Temperature Trend</h3>
+<canvas id="tempChart"></canvas>
+</div>
+
+<div class="card">
+<h3>Precipitation Probability</h3>
+<canvas id="precipChart"></canvas>
+</div>
+
+<div class="card">
+<h3>Wind Speed</h3>
+<canvas id="windChart"></canvas>
+</div>
+
+</div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+const lat = 40.0
+const lon = -76.2
+
+let hourlyData = []
+
+async function initWeather(){
+
+const point = await fetch(`https://api.weather.gov/points/${lat},${lon}`)
+const pointData = await point.json()
+
+const forecastURL = pointData.properties.forecast
+const hourlyURL = pointData.properties.forecastHourly
+const stationURL = pointData.properties.observationStations
+
+loadForecast(forecastURL)
+loadHourly(hourlyURL)
+loadCurrent(stationURL)
+
+}
+
+async function loadCurrent(url){
+
+const stations = await fetch(url)
+const stationsData = await stations.json()
+
+const station = stationsData.features[0].id
+
+const obs = await fetch(station+"/observations/latest")
+const obsData = await obs.json()
+
+const p = obsData.properties
+
+document.getElementById("current").innerHTML =
+
+`
+Temperature: ${p.temperature.value.toFixed(1)} °C<br>
+Wind: ${p.windSpeed.value?.toFixed(1) ?? "0"} m/s<br>
+Humidity: ${p.relativeHumidity.value?.toFixed(0) ?? "--"}%<br>
+Text: ${p.textDescription}
+`
+
+}
+
+async function loadForecast(url){
+
+const res = await fetch(url)
+const data = await res.json()
+
+const days = data.properties.periods
+
+const container = document.getElementById("forecast")
+
+days.slice(0,7).forEach(d=>{
+
+const el = document.createElement("div")
+
+el.className="day"
+
+el.innerHTML=
+
+`
+<b>${d.name}</b><br>
+${d.temperature}°${d.temperatureUnit}<br>
+${d.shortForecast}
+`
+
+container.appendChild(el)
+
+})
+
+}
+
+async function loadHourly(url){
+
+const res = await fetch(url)
+const data = await res.json()
+
+hourlyData = data.properties.periods.slice(0,24)
+
+const table = document.getElementById("hourly")
+
+hourlyData.forEach(h=>{
+
+const row = document.createElement("tr")
+
+row.innerHTML =
+
+`
+<td>${new Date(h.startTime).getHours()}:00</td>
+<td>${h.temperature}°</td>
+<td>${h.probabilityOfPrecipitation.value ?? 0}%</td>
+<td>${h.windSpeed}</td>
+`
+
+table.appendChild(row)
+
+})
+
+createCharts()
+
+}
+
+function createCharts(){
+
+const labels = hourlyData.map(h=>new Date(h.startTime).getHours())
+
+const temps = hourlyData.map(h=>h.temperature)
+
+const precip = hourlyData.map(h=>h.probabilityOfPrecipitation.value ?? 0)
+
+const wind = hourlyData.map(h=>parseInt(h.windSpeed))
+
+new Chart(document.getElementById("tempChart"),{
+type:"line",
+data:{
+labels:labels,
+datasets:[{label:"Temp",data:temps}]
+}
+})
+
+new Chart(document.getElementById("precipChart"),{
+type:"bar",
+data:{
+labels:labels,
+datasets:[{label:"PoP %",data:precip}]
+}
+})
+
+new Chart(document.getElementById("windChart"),{
+type:"line",
+data:{
+labels:labels,
+datasets:[{label:"Wind",data:wind}]
+}
+})
+
+}
+
+function initRadar(){
+
+const map = L.map('radar').setView([lat,lon],7)
+
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+maxZoom:10
+}).addTo(map)
+
+fetch("https://api.rainviewer.com/public/weather-maps.json")
+.then(res=>res.json())
+.then(data=>{
+
+const frame = data.radar.past.slice(-1)[0]
+
+const tile = `https://tilecache.rainviewer.com${frame.path}/256/{z}/{x}/{y}/2/1_1.png`
+
+L.tileLayer(tile,{opacity:.6}).addTo(map)
+
+})
+
+}
+
+initWeather()
+initRadar()
+
+</script>
+
+</body>
+</html>
