@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Weather App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        .section {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        #current-conditions {
+            text-align: center;
+        }
+        #current-temp {
+            font-size: 48px;
+            margin: 10px 0;
+        }
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+        .forecast-day {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .hourly-table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow-x: auto;
+            display: block;
+        }
+        .hourly-table th, .hourly-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+        #radar-map {
+            height: 400px;
+            width: 100%;
+        }
+        canvas {
+            width: 100% !important;
+            height: auto !important;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            .forecast-grid {
+                grid-template-columns: 1fr;
+            }
+            .hourly-table {
+                font-size: 14px;
+            }
+        }
+    </style>
+    <!-- Leaflet for map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Weather App</h1>
+        <p id="location">Loading location...</p>
+    </header>
+    <div class="container">
+        <div class="section" id="current-section">
+            <h2>Current Conditions</h2>
+            <div id="current-conditions">
+                <div id="current-temp"></div>
+                <p id="current-description"></p>
+                <p id="current-details"></p>
+            </div>
+            <canvas id="current-chart"></canvas>
+        </div>
+        <div class="section" id="seven-day-section">
+            <h2>7-Day Forecast</h2>
+            <div class="forecast-grid" id="seven-day-forecast"></div>
+            <canvas id="seven-day-temp-chart"></canvas>
+            <canvas id="seven-day-precip-chart"></canvas>
+        </div>
+        <div class="section" id="hourly-section">
+            <h2>Hourly Forecast</h2>
+            <div style="overflow-x: auto;">
+                <table class="hourly-table" id="hourly-forecast"></table>
+            </div>
+            <canvas id="hourly-temp-chart"></canvas>
+            <canvas id="hourly-precip-chart"></canvas>
+        </div>
+        <div class="section" id="radar-section">
+            <h2>Weather Radar</h2>
+            <div id="radar-map"></div>
+        </div>
+    </div>
+
+    <script>
+        let lat, lon;
+        let map;
+        let radarOverlay;
+
+        // Get location
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    lat = position.coords.latitude;
+                    lon = position.coords.longitude;
+                    document.getElementById('location').textContent = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                    fetchWeatherData();
+                }, () => {
+                    // Fallback to Akron, PA
+                    lat = 40.1568;
+                    lon = -76.2022;
+                    document.getElementById('location').textContent = 'Location: Akron, PA (Fallback)';
+                    fetchWeatherData();
+                });
+            } else {
+                lat = 40.1568;
+                lon = -76.2022;
+                document.getElementById('location').textContent = 'Location: Akron, PA (Fallback)';
+                fetchWeatherData();
+            }
+        }
+
+        async function fetchWeatherData() {
+            const pointsUrl = `https://api.weather.gov/points/${lat},${lon}`;
+            const pointsResponse = await fetch(pointsUrl, { headers: { 'User-Agent': 'WeatherApp/1.0' } });
+            const pointsData = await pointsResponse.json();
+
+            const forecastUrl = pointsData.properties.forecast;
+            const hourlyUrl = pointsData.properties.forecastHourly;
+            const stationsUrl = pointsData.properties.observationStations;
+
+            // Fetch current conditions
+            const stationsResponse = await fetch(stationsUrl, { headers: { 'User-Agent': 'WeatherApp/1.0' } });
+            const stationsData = await stationsResponse.json();
+            const station = stationsData.features[0].properties.stationIdentifier;
+            const observationsUrl = `https://api.weather.gov/stations/${station}/observations/latest`;
+            const obsResponse = await fetch(observationsUrl, { headers: { 'User-Agent': 'WeatherApp/1.0' } });
+            const obsData = await obsResponse.json();
+            displayCurrentConditions(obsData.properties);
+
+            // Fetch 7-day forecast
+            const forecastResponse = await fetch(forecastUrl, { headers: { 'User-Agent': 'WeatherApp/1.0' } });
+            const forecastData = await forecastResponse.json();
+            displaySevenDayForecast(forecastData.properties.periods);
+
+            // Fetch hourly forecast
+            const hourlyResponse = await fetch(hourlyUrl, { headers: { 'User-Agent': 'WeatherApp/1.0' } });
+            const hourlyData = await hourlyResponse.json();
+            displayHourlyForecast(hourlyData.properties.periods);
+
+            // Setup radar
+            setupRadar();
+        }
+
+        function displayCurrentConditions(data) {
+            const temp = data.temperature.value ? `${(data.temperature.value * 9/5 + 32).toFixed(1)}°F` : 'N/A';
+            const desc = data.textDescription || 'N/A';
+            const details = `
+                Humidity: ${data.relativeHumidity.value || 'N/A'}%<br>
+                Wind: ${data.windSpeed.value} km/h ${data.windDirection.value}°<br>
+                Pressure: ${data.barometricPressure.value / 100} hPa<br>
+                Dew Point: ${(data.dewpoint.value * 9/5 + 32).toFixed(1)}°F<br>
+                Visibility: ${data.visibility.value / 1000} km<br>
+                Heat Index: ${data.heatIndex.value ? (data.heatIndex.value * 9/5 + 32).toFixed(1) : 'N/A'}°F<br>
+                Wind Chill: ${data.windChill.value ? (data.windChill.value * 9/5 + 32).toFixed(1) : 'N/A'}°F
+            `;
+
+            document.getElementById('current-temp').textContent = temp;
+            document.getElementById('current-description').textContent = desc;
+            document.getElementById('current-details').innerHTML = details;
+
+            // Simple chart for current (maybe gauge, but use bar for temp)
+            const ctx = document.getElementById('current-chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Temperature', 'Dew Point'],
+                    datasets: [{
+                        label: 'Current Values (°F)',
+                        data: [
+                            (data.temperature.value * 9/5 + 32),
+                            (data.dewpoint.value * 9/5 + 32)
+                        ],
+                        backgroundColor: ['#007bff', '#28a745']
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: false } } }
+            });
+        }
+
+        function displaySevenDayForecast(periods) {
+            const forecastDiv = document.getElementById('seven-day-forecast');
+            forecastDiv.innerHTML = '';
+            let tempLabels = [];
+            let tempData = [];
+            let precipData = [];
+
+            periods.slice(0, 14).forEach((period, index) => { // 7 days, day/night
+                if (index % 2 === 0) {
+                    const dayDiv = document.createElement('div');
+                    dayDiv.classList.add('forecast-day');
+                    const date = new Date(period.startTime).toLocaleDateString();
+                    const tempHigh = period.temperature;
+                    const tempLow = periods[index + 1] ? periods[index + 1].temperature : 'N/A';
+                    const precip = period.probabilityOfPrecipitation.value || 0;
+                    dayDiv.innerHTML = `
+                        <h3>${date}</h3>
+                        <p>${period.name}: ${period.detailedForecast}</p>
+                        <p>High: ${tempHigh}°F</p>
+                        <p>Low: ${tempLow}°F</p>
+                        <p>Wind: ${period.windSpeed} ${period.windDirection}</p>
+                        <p>Precip: ${precip}%</p>
+                    `;
+                    forecastDiv.appendChild(dayDiv);
+
+                    tempLabels.push(date);
+                    tempData.push(tempHigh);
+                    precipData.push(precip);
+                }
+            });
+
+            // Charts
+            const tempCtx = document.getElementById('seven-day-temp-chart').getContext('2d');
+            new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: tempLabels,
+                    datasets: [{
+                        label: 'High Temp (°F)',
+                        data: tempData,
+                        borderColor: '#ff6384',
+                        fill: false
+                    }]
+                }
+            });
+
+            const precipCtx = document.getElementById('seven-day-precip-chart').getContext('2d');
+            new Chart(precipCtx, {
+                type: 'bar',
+                data: {
+                    labels: tempLabels,
+                    datasets: [{
+                        label: 'Precip %',
+                        data: precipData,
+                        backgroundColor: '#36a2eb'
+                    }]
+                }
+            });
+        }
+
+        function displayHourlyForecast(periods) {
+            const table = document.getElementById('hourly-forecast');
+            table.innerHTML = '<tr><th>Time</th><th>Temp (°F)</th><th>Desc</th><th>Wind</th><th>Precip %</th><th>Humidity %</th><th>Dew Point (°F)</th></tr>';
+
+            let tempLabels = [];
+            let tempData = [];
+            let precipData = [];
+
+            periods.slice(0, 24).forEach(period => { // First 24 hours
+                const row = document.createElement('tr');
+                const time = new Date(period.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const temp = period.temperature;
+                const desc = period.shortForecast;
+                const wind = `${period.windSpeed} ${period.windDirection}`;
+                const precip = period.probabilityOfPrecipitation.value || 0;
+                const humidity = period.relativeHumidity.value || 'N/A';
+                const dewpoint = (period.dewpoint.value * 9/5 + 32).toFixed(1) || 'N/A';
+
+                row.innerHTML = `
+                    <td>${time}</td>
+                    <td>${temp}</td>
+                    <td>${desc}</td>
+                    <td>${wind}</td>
+                    <td>${precip}</td>
+                    <td>${humidity}</td>
+                    <td>${dewpoint}</td>
+                `;
+                table.appendChild(row);
+
+                tempLabels.push(time);
+                tempData.push(temp);
+                precipData.push(precip);
+            });
+
+            // Charts
+            const tempCtx = document.getElementById('hourly-temp-chart').getContext('2d');
+            new Chart(tempCtx, {
+                type: 'line',
+                data: {
+                    labels: tempLabels,
+                    datasets: [{
+                        label: 'Temp (°F)',
+                        data: tempData,
+                        borderColor: '#ff6384',
+                        fill: false
+                    }]
+                }
+            });
+
+            const precipCtx = document.getElementById('hourly-precip-chart').getContext('2d');
+            new Chart(precipCtx, {
+                type: 'bar',
+                data: {
+                    labels: tempLabels,
+                    datasets: [{
+                        label: 'Precip %',
+                        data: precipData,
+                        backgroundColor: '#36a2eb'
+                    }]
+                }
+            });
+        }
+
+        async function setupRadar() {
+            // Use RainViewer API
+            const rainviewerUrl = 'https://api.rainviewer.com/public/weather-maps.json';
+            const rvResponse = await fetch(rainviewerUrl);
+            const rvData = await rvResponse.json();
+
+            const latestTime = rvData.radar.past[rvData.radar.past.length - 1].time;
+            const tileUrl = `${rvData.host}${rvData.radar.past[rvData.radar.past.length - 1].path}/256/{z}/{x}/{y}/2/1_1.png`;
+
+            map = L.map('radar-map').setView([lat, lon], 8);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            radarOverlay = L.tileLayer(tileUrl, {
+                opacity: 0.8,
+                attribution: 'RainViewer'
+            }).addTo(map);
+        }
+
+        getLocation();
+    </script>
+</body>
+</html>
