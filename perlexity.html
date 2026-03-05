@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Modern NWS Weather App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet CSS for map -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <!-- Chart.js for graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Basic modern styling -->
+  <style>
+    :root {
+      --bg: #050816;
+      --bg-elevated: #0f172a;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.12);
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --danger: #f97373;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.65);
+      --border-subtle: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #0b1120 0, #020617 55%, #000 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 1200px;
+      padding: 16px;
+      padding-bottom: 32px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #f9fafb;
+    }
+
+    .title span {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .location-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.75));
+      backdrop-filter: blur(10px);
+      font-size: 0.75rem;
+    }
+
+    .pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.9);
+    }
+
+    .pill-dot.error {
+      background: var(--danger);
+      box-shadow: 0 0 8px rgba(248, 113, 113, 0.9);
+    }
+
+    .pill-button {
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s, border-color 0.15s;
+    }
+
+    .pill-button:hover {
+      background: rgba(15, 23, 42, 0.95);
+      border-color: rgba(56, 189, 248, 0.7);
+      transform: translateY(-1px);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.6fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 960px) {
+      main {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    section.card {
+      border-radius: var(--radius-lg);
+      background: radial-gradient(circle at top left, #0b1120, #020617 65%, #000 100%);
+      border: var(--border-subtle);
+      box-shadow: var(--shadow-soft);
+      padding: 14px 14px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    section.card::before {
+      content: "";
+      position: absolute;
+      inset: -50%;
+      background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.12), transparent 55%);
+      opacity: 0.65;
+      pointer-events: none;
+      mix-blend-mode: soft-light;
+    }
+
+    section.card-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #e5e7eb;
+    }
+
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .current-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .temp-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .temp-value {
+      font-size: 2.6rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .temp-unit {
+      font-size: 1.1rem;
+      color: var(--muted);
+    }
+
+    .temp-meta {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.8rem;
+      color: var(--muted);
+      gap: 2px;
+    }
+
+    .condition-text {
+      font-size: 0.9rem;
+      color: #e5e7eb;
+      max-width: 240px;
+    }
+
+    .current-extra {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 8px;
+      font-size: 0.78rem;
+      margin-bottom: 8px;
+    }
+
+    .metric-pill {
+      padding: 8px 9px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.7));
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .metric-value {
+      font-size: 0.88rem;
+    }
+
+    .updated-at {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      flex: 1;
+      min-width: 100px;
+      text-align: center;
+      padding: 7px 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--muted);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #0b1120;
+      border-color: rgba(191, 219, 254, 0.8);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 30px rgba(56, 189, 248, 0.35);
+    }
+
+    .tab:hover:not(.active) {
+      background: rgba(15, 23, 42, 0.95);
+      color: #e5e7eb;
+      border-color: rgba(148, 163, 184, 0.75);
+    }
+
+    .forecast-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .forecast-item {
+      padding: 9px 9px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.14), rgba(15, 23, 42, 0.95));
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 0.78rem;
+    }
+
+    .forecast-item-title {
+      font-weight: 500;
+      font-size: 0.82rem;
+      color: #e5e7eb;
+    }
+
+    .forecast-item-temp {
+      font-size: 0.9rem;
+    }
+
+    .forecast-item-props {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .forecast-item-short {
+      color: var(--muted);
+      font-size: 0.76rem;
+    }
+
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 210px;
+      margin-bottom: 4px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend-color {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #38bdf8;
+    }
+
+    .legend-color.secondary {
+      background: #f97373;
+    }
+
+    .legend-color.tertiary {
+      background: #a855f7;
+    }
+
+    .map-container {
+      position: relative;
+      width: 100%;
+      height: 280px;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      margin-bottom: 6px;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .map-caption {
+      font-size: 0.72rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .radar-time {
+      color: #e5e7eb;
+      font-weight: 500;
+    }
+
+    .error {
+      color: var(--danger);
+      font-size: 0.8rem;
+      margin-top: 4px;
+    }
+
+    .skeleton {
+      background: linear-gradient(
+        90deg,
+        rgba(148, 163, 184, 0.1),
+        rgba(148, 163, 184, 0.25),
+        rgba(148, 163, 184, 0.1)
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 999px;
+      height: 0.78rem;
+      width: 65px;
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: -200% 0;
+      }
+      100% {
+        background-position: 200% 0;
+      }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Scrollbars */
+    .forecast-grid::-webkit-scrollbar {
+      width: 6px;
+    }
+    .forecast-grid::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .forecast-grid::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">
+        <h1>Skyglass NWS Dashboard</h1>
+        <span>7-day, hourly, current conditions & radar (NWS + RainViewer)</span>
+      </div>
+      <div class="location-status">
+        <div id="location-pill" class="pill">
+          <span class="pill-dot" id="location-dot"></span>
+          <span id="location-text">Detecting location…</span>
+        </div>
+        <button id="refresh-btn" class="pill pill-button" type="button">
+          ⟳ Refresh data
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <!-- LEFT: Current + 7-day + chart -->
+      <section class="card">
+        <div class="card-inner">
+          <div class="card-header">
+            <div>
+              <h2>Current Conditions</h2>
+              <div class="card-subtitle" id="station-name">Loading station…</div>
+            </div>
+            <div class="card-subtitle updated-at" id="updated-time"></div>
+          </div>
+
+          <div class="current-main">
+            <div class="temp-main">
+              <div>
+                <span class="temp-value" id="temp-value">--</span>
+                <span class="temp-unit">°F</span>
+              </div>
+              <div class="temp-meta">
+                <span id="feels-like">Feels like —</span>
+                <span id="wind">Wind —</span>
+              </div>
+            </div>
+            <div class="condition-text" id="condition-text">
+              Loading observation…
+            </div>
+          </div>
+
+          <div class="current-extra">
+            <div class="metric-pill">
+              <span class="metric-label">Humidity</span>
+              <span class="metric-value" id="humidity">—</span>
+            </div>
+            <div class="metric-pill">
+              <span class="metric-label">Pressure</span>
+              <span class="metric-value" id="pressure">—</span>
+            </div>
+            <div class="metric-pill">
+              <span class="metric-label">Visibility</span>
+              <span class="metric-value" id="visibility">—</span>
+            </div>
+            <div class="metric-pill">
+              <span class="metric-label">Dew Point</span>
+              <span class="metric-value" id="dewpoint">—</span>
+            </div>
+          </div>
+
+          <div class="card-header" style="margin-top: 6px;">
+            <div>
+              <h2>Forecast</h2>
+              <div class="card-subtitle">NWS gridpoint 7-day periods</div>
+            </div>
+            <div class="card-subtitle">
+              <span id="zone-name"></span>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <button class="tab active" data-forecast-tab="periods">7-Day periods</button>
+            <button class="tab" data-forecast-tab="chart">Temp & rain chart</button>
+          </div>
+
+          <div id="forecast-periods-view">
+            <div class="forecast-grid" id="forecast-grid">
+              <!-- filled by JS -->
+            </div>
+          </div>
+
+          <div id="forecast-chart-view" class="hidden">
+            <div class="chart-container">
+              <canvas id="forecast-chart"></canvas>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item">
+                <span class="legend-color"></span> Temperature (°F)
+              </div>
+              <div class="legend-item">
+                <span class="legend-color secondary"></span> Wind (mph)
+              </div>
+              <div class="legend-item">
+                <span class="legend-color tertiary"></span> PoP (%)
+              </div>
+            </div>
+          </div>
+
+          <div id="left-error" class="error hidden"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Hourly + chart + radar -->
+      <section class="card">
+        <div class="card-inner">
+          <div class="card-header">
+            <div>
+              <h2>Hourly & Radar</h2>
+              <div class="card-subtitle">NWS hourly forecast + RainViewer radar</div>
+            </div>
+            <div class="card-subtitle">
+              <span id="hourly-range"></span>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <button class="tab active" data-hourly-tab="list">Hourly list</button>
+            <button class="tab" data-hourly-tab="chart">Hourly chart</button>
+            <button class="tab" data-hourly-tab="radar">Radar</button>
+          </div>
+
+          <div id="hourly-list-view">
+            <div class="forecast-grid" id="hourly-grid">
+              <!-- filled by JS -->
+            </div>
+          </div>
+
+          <div id="hourly-chart-view" class="hidden">
+            <div class="chart-container">
+              <canvas id="hourly-chart"></canvas>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item">
+                <span class="legend-color"></span> Temperature (°F)
+              </div>
+              <div class="legend-item">
+                <span class="legend-color secondary"></span> Wind (mph)
+              </div>
+              <div class="legend-item">
+                <span class="legend-color tertiary"></span> PoP (%)
+              </div>
+            </div>
+          </div>
+
+          <div id="radar-view" class="hidden">
+            <div class="map-container">
+              <div id="map"></div>
+            </div>
+            <div class="map-caption">
+              <span>
+                Radar tiles by RainViewer (for personal use, low zoom). Data availability and zoom limits from RainViewer API.[web:3][web:9]
+              </span>
+              <span class="radar-time" id="radar-time"></span>
+            </div>
+          </div>
+
+          <div id="right-error" class="error hidden"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // ==== CONFIG ====
+    const NWS_USER_AGENT =
+      "YourAppName/1.0 (your-email@example.com)"; // REPLACE with your info to comply with NWS.[web:1]
+    const RAINVIEWER_API =
+      "https://api.rainviewer.com/public/weather-maps.json"; // public radar API.[web:3][web:9]
+
+    // ==== STATE ====
+    let pointMeta = null;
+    let forecastPeriods = [];
+    let hourlyPeriods = [];
+    let currentObservation = null;
+    let forecastChart = null;
+    let hourlyChart = null;
+    let leafMap = null;
+    let radarLayers = [];
+    let radarFrames = [];
+    let radarFrameIndex = 0;
+    let radarAnimTimer = null;
+
+    // ==== DOM HELPERS ====
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function showError(targetId, msg) {
+      const el = $(targetId);
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
+
+    function clearError(targetId) {
+      const el = $(targetId);
+      el.textContent = "";
+      el.classList.add("hidden");
+    }
+
+    function formatTimeLocal(iso) {
+      if (!iso) return "—";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      } catch {
+        return iso;
+      }
+    }
+
+    function formatHour(iso) {
+      if (!iso) return "—";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, {
+          weekday: "short",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      } catch {
+        return iso;
+      }
+    }
+
+    function formatShortTime(iso) {
+      if (!iso) return "—";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      } catch {
+        return iso;
+      }
+    }
+
+    function formatMiles(meters) {
+      if (meters == null) return "—";
+      const miles = meters / 1609.344;
+      return miles.toFixed(1) + " mi";
+    }
+
+    // ==== NWS FETCH HELPERS ====
+    async function nwsFetch(url) {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": NWS_USER_AGENT,
+          Accept: "application/ld+json",
+        },
+      });
+      if (!res.ok) {
+        throw new Error("NWS error " + res.status);
+      }
+      return res.json();
+    }
+
+    async function loadPointMeta(lat, lon) {
+      const url = `https://api.weather.gov/points/${lat},${lon}`;
+      return nwsFetch(url); // returns gridpoint metadata with forecast URLs.[web:1][web:4]
+    }
+
+    async function loadForecast(url) {
+      const data = await nwsFetch(url);
+      return data.properties?.periods || []; // NWS forecast periods list.[web:1][web:10]
+    }
+
+    async function loadObservation(station) {
+      const url = `https://api.weather.gov/stations/${station}/observations/latest`;
+      const data = await nwsFetch(url);
+      return data.properties || {};
+    }
+
+    // ==== UI BIND: CURRENT ====
+    function renderCurrentConditions() {
+      const props = currentObservation;
+      if (!props) return;
+
+      const tempF = props.temperature?.value != null
+        ? props.temperature.value * 9 / 5 + 32
+        : null;
+      $("temp-value").textContent =
+        tempF != null ? Math.round(tempF) : "--";
+
+      const windSpeedMps = props.windSpeed?.value;
+      const windMph =
+        windSpeedMps != null ? windSpeedMps * 2.23694 : null;
+      const windDir = props.windDirection?.value;
+      let windText = "Wind —";
+      if (windMph != null) {
+        windText = `Wind ${Math.round(windMph)} mph`;
+        if (windDir != null) {
+          const dir = Math.round(windDir);
+          windText += ` @ ${dir}°`;
+        }
+      }
+      $("wind").textContent = windText;
+
+      const relHum = props.relativeHumidity?.value;
+      $("humidity").textContent =
+        relHum != null ? `${Math.round(relHum)}%` : "—";
+
+      const pressurePa = props.barometricPressure?.value;
+      if (pressurePa != null) {
+        const inHg = pressurePa / 3386.389;
+        $("pressure").textContent = inHg.toFixed(2) + " inHg";
+      } else {
+        $("pressure").textContent = "—";
+      }
+
+      const vis = props.visibility?.value;
+      $("visibility").textContent = formatMiles(vis);
+
+      const dewC = props.dewpoint?.value;
+      if (dewC != null) {
+        const dewF = dewC * 9 / 5 + 32;
+        $("dewpoint").textContent = Math.round(dewF) + " °F";
+      } else {
+        $("dewpoint").textContent = "—";
+      }
+
+      // Approx feels-like, fallback to temp
+      let feels = tempF;
+      const wind = windMph;
+      const rh = relHum;
+      if (tempF != null && wind != null && tempF >= 80 && wind >= 3) {
+        const t = tempF;
+        const v = wind;
+        const hi =
+          -42.379 +
+          2.04901523 * t +
+          10.14333127 * rh -
+          0.22475541 * t * rh -
+          0.00683783 * t * t -
+          0.05481717 * rh * rh +
+          0.00122874 * t * t * rh +
+          0.00085282 * t * rh * rh -
+          0.00000199 * t * t * rh * rh;
+        feels = hi;
+      }
+      $("feels-like").textContent =
+        feels != null ? `Feels like ${Math.round(feels)} °F` : "Feels like —";
+
+      $("condition-text").textContent =
+        props.textDescription || "—";
+
+      $("station-name").textContent =
+        props.station || "Latest observation";
+
+      $("updated-time").textContent =
+        "Updated " + formatTimeLocal(props.timestamp);
+    }
+
+    // ==== UI BIND: 7-DAY ====
+    function renderForecastGrid() {
+      const grid = $("forecast-grid");
+      grid.innerHTML = "";
+      forecastPeriods.forEach((p) => {
+        const div = document.createElement("div");
+        div.className = "forecast-item";
+        const isNight = /night/i.test(p.name || p.shortForecast || "");
+        const tempStr = `${p.temperature} °${p.temperatureUnit || "F"}`;
+        const wind = p.windSpeed || "—";
+        const pop =
+          p.probabilityOfPrecipitation?.value != null
+            ? `${p.probabilityOfPrecipitation.value}%`
+            : "—";
+        div.innerHTML = `
+          <div class="forecast-item-title">${p.name || "Period"}</div>
+          <div class="forecast-item-temp">
+            <strong>${tempStr}</strong> · ${isNight ? "Night" : "Day"}
+          </div>
+          <div class="forecast-item-props">
+            <span>Wind ${wind}</span>
+            <span>PoP ${pop}</span>
+            <span>${formatTimeLocal(p.startTime)}</span>
+          </div>
+          <div class="forecast-item-short">${p.detailedForecast || p.shortForecast || ""}</div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+
+    function buildForecastChart() {
+      const ctx = $("forecast-chart").getContext("2d");
+      const labels = forecastPeriods.map((p) => p.name || "");
+      const temps = forecastPeriods.map((p) => p.temperature || null);
+      const winds = forecastPeriods.map((p) => {
+        const wd = p.windSpeed || "";
+        const num = parseInt(wd, 10);
+        return isNaN(num) ? null : num;
+      });
+      const pops = forecastPeriods.map((p) =>
+        p.probabilityOfPrecipitation?.value != null
+          ? p.probabilityOfPrecipitation.value
+          : null
+      );
+
+      if (forecastChart) {
+        forecastChart.destroy();
+      }
+
+      forecastChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Temperature (°F)",
+              data: temps,
+              borderColor: "#38bdf8",
+              backgroundColor: "rgba(56, 189, 248, 0.18)",
+              tension: 0.3,
+              yAxisID: "y",
+            },
+            {
+              label: "Wind (mph)",
+              data: winds,
+              borderColor: "#f97373",
+              backgroundColor: "rgba(248, 113, 113, 0.18)",
+              tension: 0.3,
+              yAxisID: "y1",
+            },
+            {
+              label: "PoP (%)",
+              data: pops,
+              borderColor: "#a855f7",
+              backgroundColor: "rgba(168, 85, 247, 0.18)",
+              tension: 0.3,
+              yAxisID: "y2",
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: "index",
+              intersect: false,
+            },
+          },
+          interaction: {
+            mode: "index",
+            intersect: false,
+          },
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", maxRotation: 45, minRotation: 0 },
+              grid: { color: "rgba(55, 65, 81, 0.5)" },
+            },
+            y: {
+              position: "left",
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(55, 65, 81, 0.3)" },
+            },
+            y1: {
+              position: "right",
+              ticks: { color: "#fca5a5" },
+              grid: { display: false },
+            },
+            y2: {
+              position: "right",
+              ticks: { color: "#c4b5fd" },
+              grid: { display: false },
+              offset: true,
+              min: 0,
+              max: 100,
+            },
+          },
+        },
+      });
+    }
+
+    // ==== UI BIND: HOURLY ====
+    function renderHourlyGrid() {
+      const grid = $("hourly-grid");
+      grid.innerHTML = "";
+      hourlyPeriods.forEach((p, idx) => {
+        if (idx > 48) return; // keep list manageable
+        const div = document.createElement("div");
+        div.className = "forecast-item";
+        const tempStr = `${p.temperature} °${p.temperatureUnit || "F"}`;
+        const pop =
+          p.probabilityOfPrecipitation?.value != null
+            ? `${p.probabilityOfPrecipitation.value}%`
+            : "—";
+        const wind = p.windSpeed || "—";
+        div.innerHTML = `
+          <div class="forecast-item-title">${formatHour(p.startTime)}</div>
+          <div class="forecast-item-temp">
+            <strong>${tempStr}</strong> · ${p.shortForecast || ""}
+          </div>
+          <div class="forecast-item-props">
+            <span>Wind ${wind}</span>
+            <span>PoP ${pop}</span>
+            <span>Ends ${formatShortTime(p.endTime)}</span>
+          </div>
+        `;
+        grid.appendChild(div);
+      });
+
+      if (hourlyPeriods.length > 0) {
+        $("hourly-range").textContent =
+          formatHour(hourlyPeriods[0].startTime) +
+          " → " +
+          formatHour(hourlyPeriods[hourlyPeriods.length - 1].startTime);
+      } else {
+        $("hourly-range").textContent = "";
+      }
+    }
+
+    function buildHourlyChart() {
+      if (!hourlyPeriods.length) return;
+
+      const ctx = $("hourly-chart").getContext("2d");
+      const slice = hourlyPeriods.slice(0, 48);
+      const labels = slice.map((p) =>
+        new Date(p.startTime).toLocaleTimeString(undefined, {
+          hour: "numeric",
+          hour12: true,
+        })
+      );
+      const temps = slice.map((p) => p.temperature || null);
+      const winds = slice.map((p) => {
+        const wd = p.windSpeed || "";
+        const num = parseInt(wd, 10);
+        return isNaN(num) ? null : num;
+      });
+      const pops = slice.map((p) =>
+        p.probabilityOfPrecipitation?.value != null
+          ? p.probabilityOfPrecipitation.value
+          : null
+      );
+
+      if (hourlyChart) {
+        hourlyChart.destroy();
+      }
+
+      hourlyChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Temperature (°F)",
+              data: temps,
+              borderColor: "#38bdf8",
+              backgroundColor: "rgba(56, 189, 248, 0.18)",
+              tension: 0.35,
+              yAxisID: "y",
+            },
+            {
+              label: "Wind (mph)",
+              data: winds,
+              borderColor: "#f97373",
+              backgroundColor: "rgba(248, 113, 113, 0.18)",
+              tension: 0.35,
+              yAxisID: "y1",
+            },
+            {
+              label: "PoP (%)",
+              data: pops,
+              borderColor: "#a855f7",
+              backgroundColor: "rgba(168, 85, 247, 0.18)",
+              tension: 0.35,
+              yAxisID: "y2",
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { mode: "index", intersect: false },
+          },
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", maxRotation: 0, minRotation: 0 },
+              grid: { color: "rgba(55, 65, 81, 0.4)" },
+            },
+            y: {
+              position: "left",
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(55, 65, 81, 0.3)" },
+            },
+            y1: {
+              position: "right",
+              ticks: { color: "#fca5a5" },
+              grid: { display: false },
+            },
+            y2: {
+              position: "right",
+              ticks: { color: "#c4b5fd" },
+              grid: { display: false },
+              offset: true,
+              min: 0,
+              max: 100,
+            },
+          },
+        },
+      });
+    }
+
+    // ==== RADAR (RainViewer) ====
+    async function loadRadarFrames() {
+      const res = await fetch(RAINVIEWER_API);
+      if (!res.ok) {
+        throw new Error("Radar API error " + res.status);
+      }
+      const api = await res.json();
+      const past = api.radar?.past || api.past || [];
+      const nowcast = api.radar?.nowcast || api.nowcast || [];
+      radarFrames = past.concat(nowcast); // timeline of radar frames.[web:3][web:9]
+      return api;
+    }
+
+    function initMap(lat, lon, api) {
+      if (!leafMap) {
+        leafMap = L.map("map").setView([lat, lon], 6);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 10,
+          attribution: "© OpenStreetMap contributors",
+        }).addTo(leafMap);
+      } else {
+        leafMap.setView([lat, lon], 6);
+      }
+
+      // Add marker for location
+      L.marker([lat, lon]).addTo(leafMap);
+
+      // Setup radar layers using RainViewer tiles.[web:3][web:9]
+      radarLayers.forEach((layer) => leafMap.removeLayer(layer));
+      radarLayers = [];
+
+      const baseUrl = api.radar?.host || api.host;
+      const path = api.radar?.path || api.path;
+
+      radarFrames.forEach((frame) => {
+        const urlTemplate = `${baseUrl}${path}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+        const layer = L.tileLayer(urlTemplate, {
+          tileSize: 256,
+          opacity: 0,
+          zIndex: 50,
+        });
+        radarLayers.push(layer);
+        layer.addTo(leafMap);
+      });
+
+      radarFrameIndex = radarLayers.length - 1;
+      showRadarFrame(radarFrameIndex);
+      startRadarAnimation();
+
+      if (radarFrames[radarFrameIndex]) {
+        const timestamp =
+          radarFrames[radarFrameIndex].time || radarFrames[radarFrameIndex].ts;
+        if (timestamp) {
+          const ts = new Date(timestamp * 1000);
+          $("radar-time").textContent =
+            "Radar frame: " +
+            ts.toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            });
+        }
+      }
+    }
+
+    function showRadarFrame(index) {
+      radarLayers.forEach((layer, i) => {
+        layer.setOpacity(i === index ? 0.85 : 0);
+      });
+    }
+
+    function startRadarAnimation() {
+      if (radarAnimTimer) {
+        clearInterval(radarAnimTimer);
+      }
+      radarAnimTimer = setInterval(() => {
+        radarFrameIndex = (radarFrameIndex + 1) % radarLayers.length;
+        showRadarFrame(radarFrameIndex);
+      }, 700);
+    }
+
+    // ==== TABS ====
+    function setupTabs() {
+      document.querySelectorAll("[data-forecast-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document
+            .querySelectorAll("[data-forecast-tab]")
+            .forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const tab = btn.getAttribute("data-forecast-tab");
+          $("forecast-periods-view").classList.toggle(
+            "hidden",
+            tab !== "periods"
+          );
+          $("forecast-chart-view").classList.toggle(
+            "hidden",
+            tab !== "chart"
+          );
+          if (tab === "chart" && forecastPeriods.length) {
+            buildForecastChart();
+          }
+        });
+      });
+
+      document.querySelectorAll("[data-hourly-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document
+            .querySelectorAll("[data-hourly-tab]")
+            .forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const tab = btn.getAttribute("data-hourly-tab");
+          $("hourly-list-view").classList.toggle("hidden", tab !== "list");
+          $("hourly-chart-view").classList.toggle(
+            "hidden",
+            tab !== "chart"
+          );
+          $("radar-view").classList.toggle("hidden", tab !== "radar");
+          if (tab === "chart" && hourlyPeriods.length) {
+            buildHourlyChart();
+          }
+          if (tab === "radar" && leafMap) {
+            setTimeout(() => {
+              leafMap.invalidateSize();
+            }, 100);
+          }
+        });
+      });
+    }
+
+    // ==== LOCATION & MAIN FLOW ====
+    async function refreshAll() {
+      clearError("left-error");
+      clearError("right-error");
+      $("location-dot").classList.remove("error");
+      $("location-text").textContent = "Detecting location…";
+
+      if (!navigator.geolocation) {
+        $("location-dot").classList.add("error");
+        $("location-text").textContent =
+          "Geolocation not available. Using Akron, PA (fallback).";
+        const lat = 40.1562;
+        const lon = -76.2033;
+        await loadForCoords(lat, lon);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude.toFixed(4);
+          const lon = pos.coords.longitude.toFixed(4);
+          $("location-text").textContent = `Location ${lat}, ${lon}`;
+          await loadForCoords(lat, lon);
+        },
+        async () => {
+          $("location-dot").classList.add("error");
+          $("location-text").textContent =
+            "Location permission denied. Using Akron, PA.";
+          const lat = 40.1562;
+          const lon = -76.2033;
+          await loadForCoords(lat, lon);
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+
+    async function loadForCoords(lat, lon) {
+      try {
+        const point = await loadPointMeta(lat, lon);
+        pointMeta = point;
+        const props = point.properties || {};
+        $("zone-name").textContent = props.forecastOffice || "";
+
+        const forecastUrl = props.forecast;
+        const hourlyUrl = props.forecastHourly;
+        const station = props.observationStations
+          ? props.observationStations[0]
+          : null;
+
+        if (!forecastUrl || !hourlyUrl) {
+          throw new Error("Missing forecast URL for this point.");
+        }
+
+        forecastPeriods = await loadForecast(forecastUrl);
+        hourlyPeriods = await loadForecast(hourlyUrl);
+        renderForecastGrid();
+        renderHourlyGrid();
+
+        if (station) {
+          const stId = station.split("/").pop();
+          currentObservation = await loadObservation(stId);
+          renderCurrentConditions();
+        } else {
+          $("station-name").textContent = "No station found";
+        }
+
+        // Radar
+        try {
+          const api = await loadRadarFrames();
+          initMap(lat, lon, api);
+        } catch (e) {
+          showError(
+            "right-error",
+            "Radar unavailable from RainViewer at the moment."
+          );
+        }
+      } catch (e) {
+        $("location-dot").classList.add("error");
+        showError(
+          "left-error",
+          "Failed to load NWS data: " + e.message
+        );
+      }
+    }
+
+    // ==== INIT ====
+    window.addEventListener("load", () => {
+      setupTabs();
+      $("refresh-btn").addEventListener("click", refreshAll);
+      refreshAll();
+    });
+  </script>
+</body>
+</html>
