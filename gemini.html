@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern NWS Weather Dashboard</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0284c7;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: var(--text-main);
+        }
+
+        button {
+            background-color: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            margin-bottom: 16px;
+            font-size: 1.4rem;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 8px;
+        }
+
+        /* Current Conditions */
+        #current-conditions {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .temp-huge {
+            font-size: 4rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--accent);
+        }
+
+        .current-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            color: var(--text-muted);
+        }
+
+        .current-details span {
+            display: block;
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        /* Radar Map */
+        #radar-map {
+            height: 400px;
+            width: 100%;
+            border-radius: 12px;
+            background-color: #334155;
+            z-index: 1;
+        }
+
+        /* 7 Day Forecast Grid */
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 16px;
+        }
+
+        .forecast-day {
+            background-color: #334155;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .forecast-day img {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 10px 0;
+            object-fit: cover;
+        }
+
+        .forecast-day .day-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .forecast-day .day-temp {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .forecast-day .day-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 350px;
+            width: 100%;
+        }
+
+        #status-message {
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+
+        @media (max-width: 600px) {
+            .current-details {
+                grid-template-columns: 1fr;
+            }
+            #radar-map {
+                height: 300px;
+            }
+            .temp-huge {
+                font-size: 3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div>
+                <h1>Weather Dashboard</h1>
+                <div id="status-message">Loading data for Akron, PA...</div>
+            </div>
+            <button id="btn-location">Use My Location</button>
+        </header>
+
+        <div class="card">
+            <h2>Current Conditions</h2>
+            <div id="current-conditions">
+                <div class="temp-huge" id="current-temp">--°F</div>
+                <div class="current-details">
+                    <div>
+                        Condition
+                        <span id="current-desc">--</span>
+                    </div>
+                    <div>
+                        Humidity
+                        <span id="current-humidity">--%</span>
+                    </div>
+                    <div>
+                        Wind
+                        <span id="current-wind">-- mph</span>
+                    </div>
+                    <div>
+                        Station
+                        <span id="current-station">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>48-Hour Hourly Forecast</h2>
+            <div class="chart-container">
+                <canvas id="hourlyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Live Weather Radar</h2>
+            <div id="radar-map"></div>
+        </div>
+
+        <div class="card">
+            <h2>7-Day Forecast</h2>
+            <div class="forecast-grid" id="forecast-container">
+                </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // Default Location (Akron, PA)
+        let lat = 40.0883;
+        let lon = -76.2016;
+
+        let map, radarLayer, hourlyChartInstance;
+
+        const uiElements = {
+            status: document.getElementById('status-message'),
+            currTemp: document.getElementById('current-temp'),
+            currDesc: document.getElementById('current-desc'),
+            currHum: document.getElementById('current-humidity'),
+            currWind: document.getElementById('current-wind'),
+            currStation: document.getElementById('current-station'),
+            forecastContainer: document.getElementById('forecast-container'),
+            locationBtn: document.getElementById('btn-location')
+        };
+
+        // --- Init Function ---
+        async function fetchWeatherData(latitude, longitude) {
+            uiElements.status.innerText = `Fetching NWS grid data for ${latitude.toFixed(4)}, ${longitude.toFixed(4)}...`;
+            
+            try {
+                // 1. Get Grid Points from NWS
+                const pointsRes = await fetch(`https://api.weather.gov/points/${latitude},${longitude}`);
+                if (!pointsRes.ok) throw new Error("Failed to fetch NWS Grid endpoint.");
+                const pointsData = await pointsRes.json();
+                
+                const { forecast, forecastHourly, observationStations, relativeLocation } = pointsData.properties;
+                const locName = `${relativeLocation.properties.city}, ${relativeLocation.properties.state}`;
+                uiElements.status.innerText = `Loading weather for ${locName}...`;
+
+                // 2. Fetch all data concurrently
+                const [forecastRes, hourlyRes, stationsRes] = await Promise.all([
+                    fetch(forecast),
+                    fetch(forecastHourly),
+                    fetch(observationStations)
+                ]);
+
+                const forecastData = await forecastRes.json();
+                const hourlyData = await hourlyRes.json();
+                const stationsData = await stationsRes.json();
+
+                // 3. Current Conditions
+                await loadCurrentConditions(stationsData, forecastData);
+
+                // 4. Hourly Forecast Chart
+                renderHourlyChart(hourlyData.properties.periods);
+
+                // 5. 7-Day Forecast Cards
+                render7Day(forecastData.properties.periods);
+
+                // 6. Initialize or Update Map
+                initOrUpdateRadar(latitude, longitude);
+
+                uiElements.status.innerText = `Latest data for ${locName}`;
+
+            } catch (error) {
+                console.error(error);
+                uiElements.status.innerText = "Error loading weather data. NWS API might be down.";
+            }
+        }
+
+        // --- Current Conditions Logic ---
+        async function loadCurrentConditions(stationsData, forecastData) {
+            try {
+                // Get the closest station ID
+                const stationId = stationsData.features[0].properties.stationIdentifier;
+                const obsRes = await fetch(`https://api.weather.gov/stations/${stationId}/observations/latest`);
+                
+                if (obsRes.ok) {
+                    const obsData = await obsRes.json();
+                    const props = obsData.properties;
+                    
+                    // Convert C to F
+                    let tempF = "--";
+                    if (props.temperature.value !== null) {
+                        tempF = Math.round((props.temperature.value * 9/5) + 32);
+                    }
+
+                    uiElements.currTemp.innerText = `${tempF}°F`;
+                    uiElements.currDesc.innerText = props.textDescription || "Unknown";
+                    uiElements.currHum.innerText = props.relativeHumidity.value ? `${Math.round(props.relativeHumidity.value)}%` : "--%";
+                    
+                    let windMph = props.windSpeed.value ? Math.round(props.windSpeed.value * 2.23694) : 0;
+                    uiElements.currWind.innerText = `${windMph} mph`;
+                    uiElements.currStation.innerText = stationId;
+                    return;
+                }
+            } catch (e) {
+                console.warn("Failed fetching observation, falling back to forecast data", e);
+            }
+
+            // Fallback if observation fails (NWS observation endpoints frequently go offline)
+            const currentForecast = forecastData.properties.periods[0];
+            uiElements.currTemp.innerText = `${currentForecast.temperature}°${currentForecast.temperatureUnit}`;
+            uiElements.currDesc.innerText = currentForecast.shortForecast;
+            uiElements.currHum.innerText = currentForecast.relativeHumidity.value + "%";
+            uiElements.currWind.innerText = currentForecast.windSpeed;
+            uiElements.currStation.innerText = "Forecast Fallback";
+        }
+
+        // --- Chart.js Hourly Forecast ---
+        function renderHourlyChart(periods) {
+            // Slice the first 48 hours to avoid overcrowding
+            const dataSlice = periods.slice(0, 48);
+            
+            const labels = dataSlice.map(p => {
+                const date = new Date(p.startTime);
+                return date.toLocaleTimeString([], { hour: 'numeric' });
+            });
+            
+            const temps = dataSlice.map(p => p.temperature);
+            const precip = dataSlice.map(p => p.probabilityOfPrecipitation.value || 0);
+
+            const ctx = document.getElementById('hourlyChart').getContext('2d');
+            
+            if (hourlyChartInstance) {
+                hourlyChartInstance.destroy(); // Clear old chart if location changes
+            }
+
+            hourlyChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Temperature (°F)',
+                            data: temps,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Precipitation Chance (%)',
+                            data: precip,
+                            backgroundColor: 'rgba(52, 211, 153, 0.5)',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', maxTicksLimit: 12 }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#f8fafc' } }
+                    }
+                }
+            });
+        }
+
+        // --- 7-Day Forecast Cards ---
+        function render7Day(periods) {
+            uiElements.forecastContainer.innerHTML = '';
+            
+            // NWS splits days into Day and Night. We will just grab the next 7 daytime periods (or current night if it's night).
+            // To keep it simple, we iterate and show the next 7 periods.
+            const nextPeriods = periods.slice(0, 14); 
+
+            nextPeriods.forEach(period => {
+                const el = document.createElement('div');
+                el.className = 'forecast-day';
+                el.innerHTML = `
+                    <div class="day-name">${period.name}</div>
+                    <img src="${period.icon}" alt="Weather Icon">
+                    <div class="day-temp">${period.temperature}°${period.temperatureUnit}</div>
+                    <div class="day-desc">${period.shortForecast}</div>
+                `;
+                uiElements.forecastContainer.appendChild(el);
+            });
+        }
+
+        // --- Radar Integration (Rainviewer) ---
+        async function initOrUpdateRadar(lat, lon) {
+            // Initialize map if it doesn't exist
+            if (!map) {
+                map = L.map('radar-map').setView([lat, lon], 8);
+                // Dark theme base map
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                    subdomains: 'abcd',
+                    maxZoom: 20
+                }).addTo(map);
+            } else {
+                map.setView([lat, lon], 8);
+            }
+
+            try {
+                // Get Latest Rainviewer timestamp
+                const rvRes = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+                const rvData = await rvRes.json();
+                const pastFrames = rvData.radar.past;
+                const latestFrame = pastFrames[pastFrames.length - 1];
+
+                // Remove old radar layer if updating
+                if (radarLayer) {
+                    map.removeLayer(radarLayer);
+                }
+
+                // Add new radar layer (Color scheme 2 = standard radar colors)
+                radarLayer = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${latestFrame.time}/256/{z}/{x}/{y}/2/1_1.png`, {
+                    opacity: 0.6,
+                    attribution: 'Radar Data &copy; RainViewer'
+                }).addTo(map);
+
+            } catch (e) {
+                console.error("Error loading radar", e);
+            }
+        }
+
+        // --- User Geolocation ---
+        uiElements.locationBtn.addEventListener('click', () => {
+            if (navigator.geolocation) {
+                uiElements.status.innerText = "Requesting location permission...";
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        fetchWeatherData(position.coords.latitude, position.coords.longitude);
+                    },
+                    (error) => {
+                        uiElements.status.innerText = "Location access denied or failed. Showing default.";
+                        console.error(error);
+                    }
+                );
+            } else {
+                alert("Geolocation is not supported by your browser.");
+            }
+        });
+
+        // Initialize App on load
+        fetchWeatherData(lat, lon);
+
+    </script>
+</body>
+</html>
